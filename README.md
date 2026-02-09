@@ -1,4 +1,4 @@
-# IP-Database-MMDB
+# IP Database MMDB
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Xramas/ip-database-mmdb/blob/master/LICENSE)
 [![Last Update](https://img.shields.io/github/release-date/Xramas/ip-database-mmdb)](https://github.com/Xramas/ip-database-mmdb/releases/latest)
