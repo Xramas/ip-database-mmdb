@@ -2,7 +2,6 @@ name: Update IP Databases
 
 on:
   schedule:
-    # 北京时间每天 08:00 (UTC 00:00) 运行
     - cron: '0 0 * * *'
   workflow_dispatch:
 
@@ -20,24 +19,23 @@ jobs:
         run: mkdir -p output
 
       # ----------------------------------------------------------------
-      # 1. IPinfo (Direct Download)
+      # 1. IPinfo (Curl with User-Agent)
       # ----------------------------------------------------------------
       - name: Download IPinfo
         run: |
           echo "Downloading IPinfo..."
-          curl -s -L -o output/ipinfo_lite.mmdb "https://ipinfo.io/data/ipinfo_lite.mmdb?_src=frontend&token=${{ secrets.IPINFO_TOKEN }}"
+          curl -s -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+            -o output/ipinfo_lite.mmdb \
+            "https://ipinfo.io/data/ipinfo_lite.mmdb?_src=frontend&token=${{ secrets.IPINFO_TOKEN }}"
           echo "IPinfo downloaded."
 
       # ----------------------------------------------------------------
       # 2. DB-IP (Smart Date Fallback)
-      # 逻辑：先尝试下载当月版本，如果 404（还没发布），则下载上个月版本
       # ----------------------------------------------------------------
       - name: Download DB-IP
         run: |
-          # 获取当前月份 (e.g., 2026-02) 和上个月份 (e.g., 2026-01)
           CURRENT_MONTH=$(date +%Y-%m)
           PREV_MONTH=$(date -d "last month" +%Y-%m)
-          
           declare -a types=("asn" "city" "country")
           
           for type in "${types[@]}"; do
@@ -45,66 +43,67 @@ jobs:
             URL_CURRENT="https://download.db-ip.com/free/${FILENAME}-${CURRENT_MONTH}.mmdb.gz"
             URL_PREV="https://download.db-ip.com/free/${FILENAME}-${PREV_MONTH}.mmdb.gz"
             
-            echo "Attempting to download DB-IP $type for $CURRENT_MONTH..."
-            
-            # 尝试下载当月
+            echo "Processing DB-IP $type..."
             if curl --output /dev/null --silent --head --fail "$URL_CURRENT"; then
-              wget -O "output/${FILENAME}.mmdb.gz" "$URL_CURRENT"
-              echo "Downloaded $CURRENT_MONTH version."
+              curl -s -L -o "output/${FILENAME}.mmdb.gz" "$URL_CURRENT"
             else
-              echo "Current month ($CURRENT_MONTH) not found, trying previous month ($PREV_MONTH)..."
-              wget -O "output/${FILENAME}.mmdb.gz" "$URL_PREV"
-              echo "Downloaded $PREV_MONTH version."
+              echo "Trying previous month..."
+              curl -s -L -o "output/${FILENAME}.mmdb.gz" "$URL_PREV"
             fi
 
-            # 解压
             if [ -f "output/${FILENAME}.mmdb.gz" ]; then
               gunzip -f "output/${FILENAME}.mmdb.gz"
             fi
           done
 
       # ----------------------------------------------------------------
-      # 3. MaxMind GeoLite2 (Updated Secret Name)
+      # 3. MaxMind GeoLite2 (High Failure Risk - Isolated)
+      # 使用 Curl + Browser UA 尝试绕过 451，并允许失败
       # ----------------------------------------------------------------
       - name: Download MaxMind
+        continue-on-error: true # 关键：如果 MaxMind 451 报错，不中断后续步骤
         run: |
           declare -a editions=("GeoLite2-ASN" "GeoLite2-City" "GeoLite2-Country")
           
           for edition in "${editions[@]}"; do
             echo "Processing MaxMind $edition..."
             
-            # 使用新变量名 MAXMIND_TOKEN
-            URL="https://download.maxmind.com/app/geoip_download?edition_id=${edition}&license_key=${{ secrets.MAXMIND_TOKEN }}&suffix=tar.gz"
+            # 使用 Curl 模拟浏览器 User-Agent
+            HTTP_CODE=$(curl -s -L -w "%{http_code}" -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+              -o "${edition}.tar.gz" \
+              "https://download.maxmind.com/app/geoip_download?edition_id=${edition}&license_key=${{ secrets.MAXMIND_TOKEN }}&suffix=tar.gz")
             
-            wget -O "${edition}.tar.gz" "$URL"
-            
-            # 解压并提取 .mmdb
-            mkdir -p temp_extract
-            tar -xzf "${edition}.tar.gz" -C temp_extract
-            find temp_extract -name "*.mmdb" -exec mv {} output/ \;
-            
-            # 清理
-            rm "${edition}.tar.gz"
-            rm -rf temp_extract
+            if [ "$HTTP_CODE" == "200" ]; then
+              echo "Download success for $edition."
+              # 解压
+              mkdir -p temp_extract
+              tar -xzf "${edition}.tar.gz" -C temp_extract
+              find temp_extract -name "*.mmdb" -exec mv {} output/ \;
+              rm -rf temp_extract "${edition}.tar.gz"
+            else
+              echo "Failed to download $edition. HTTP Code: $HTTP_CODE (Likely blocked by MaxMind)"
+              # 删除可能的空文件
+              rm -f "${edition}.tar.gz"
+            fi
           done
 
       # ----------------------------------------------------------------
       # 4. IP2Location
       # ----------------------------------------------------------------
       - name: Download IP2Location
+        continue-on-error: true
         run: |
-          # 默认下载 DB11.LITE.BIN (IPv4/IPv6 City)
           CODE="DB11.LITE.BIN"
-          
           echo "Downloading IP2Location $CODE..."
-          wget -O "ip2location.zip" "https://www.ip2location.com/download/?token=${{ secrets.IP2LOCATION_TOKEN }}&file=$CODE"
+          curl -s -L -o "ip2location.zip" "https://www.ip2location.com/download/?token=${{ secrets.IP2LOCATION_TOKEN }}&file=$CODE"
           
-          unzip -o ip2location.zip -d output/
-          rm ip2location.zip
+          if [ -f "ip2location.zip" ]; then
+            unzip -o ip2location.zip -d output/ || echo "Unzip failed, maybe token expired?"
+            rm -f ip2location.zip
+          fi
 
       # ----------------------------------------------------------------
-      # 5. 删除旧 Release (保留最近 30 个)
-      # 防止仓库爆满
+      # 5. 清理与发布
       # ----------------------------------------------------------------
       - name: Delete Older Releases
         uses: dev-drprasad/delete-older-releases@v0.3.2
@@ -114,9 +113,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ----------------------------------------------------------------
-      # 6. 发布新 Release
-      # ----------------------------------------------------------------
       - name: Generate Release Tag
         id: tag
         run: echo "release_tag=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
@@ -130,5 +126,6 @@ jobs:
           body: |
             Automatic daily update.
             Sources: IPinfo, DB-IP, MaxMind, IP2Location.
+            (Note: Some sources might be missing if upstream blocked the download)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
