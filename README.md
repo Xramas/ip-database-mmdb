@@ -1,4 +1,4 @@
-# IP Info Database (MMDB Collection)
+# IP Info Database
 
 [![License](https://img.shields.io/github/license/Xramas/IP_INFO_DATABASE)](https://github.com/Xramas/IP_INFO_DATABASE/blob/master/LICENSE)
 [![Last Update](https://img.shields.io/github/release-date/Xramas/IP_INFO_DATABASE)](https://github.com/Xramas/IP_INFO_DATABASE/releases/latest)
