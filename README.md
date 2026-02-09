@@ -30,7 +30,7 @@ The data files distributed in this repository are governed by the terms of their
 
 ---
 
-## 🛠 Automation
+## Automation
 
 This repository uses GitHub Actions to pull and repackage data every Monday (00:00 UTC). 
 
