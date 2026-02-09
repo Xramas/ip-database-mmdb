@@ -1,7 +1,7 @@
 # IP Info Database
 
-[![License](https://img.shields.io/github/license/Xramas/IP_INFO_DATABASE)](https://github.com/Xramas/IP_INFO_DATABASE/blob/master/LICENSE)
-[![Last Update](https://img.shields.io/github/release-date/Xramas/IP_INFO_DATABASE)](https://github.com/Xramas/IP_INFO_DATABASE/releases/latest)
+[![License](https://img.shields.io/github/license/Xramas/IP_INFO_DATABASE?color=blue)](https://github.com/Xramas/IP_INFO_DATABASE/blob/master/LICENSE)
+[![Last Update](https://img.shields.io/github/release-date/Xramas/IP_INFO_DATABASE?color=green)](https://github.com/Xramas/IP_INFO_DATABASE/releases/latest)
 
 A repository for automated aggregation, update, and distribution of popular public IP geolocation databases in MMDB format.
 
